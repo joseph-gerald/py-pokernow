@@ -17,6 +17,14 @@ pip install -e .
 
 ## Getting Your Authentication Token
 
+Run this in your browser console whilst on pokernow.club:
+
+```js
+document.cookie.split("apt=")[1].split(";")[0]
+```
+
+or follow these steps:
+
 1. Go to [pokernow.club](https://www.pokernow.club)
 2. Log in to your account
 3. Open browser DevTools (F12)

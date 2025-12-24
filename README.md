@@ -164,13 +164,12 @@ config = PokerGameConfig(
 
 ### Game Types
 - `'th'` - Texas Hold'em
-- `'plo'` - Pot Limit Omaha
-- `'plo5'` - 5-Card PLO
-- `'ofc'` - Open Face Chinese
+- `'omaha'` - Omaha Hi
+- `'plo8'` - Omaha Hi/low
 
 ## Authentication
 
-Get your `apt_token` by logging into pokernow.club and inspecting your cookies.
+Get your `apt_token` by logging into pokernow.club and inspecting your cookies (view [QUICKSTART.md](QUICKSTART.md) for step by step instructions).
 
 For programmatic login (requires OTP):
 
