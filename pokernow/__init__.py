@@ -4,7 +4,7 @@ py-pokernow: A Python library for interacting with pokernow.club
 
 from ._version import __version__
 
-__author__ = "Your Name"
+__author__ = "Joseph Gerald"
 __license__ = "AGPL-3.0"
 
 from .pokernow import (
