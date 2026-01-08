@@ -23,16 +23,28 @@ print()
 # Add chips to player using the club object
 amount_to_add = 1000
 club.add_chips_to_player(
-    player_id=player.user_id,
+    user_id=player.user_id,
     amount=amount_to_add,
     reason="Weekly bonus"
 )
 print(f"Added {amount_to_add} chips")
 
+# Send chips to another player using P2P transfer (requires P2P enabled in the club)
+recipient = club.get_player_by_username("Alice")
+if recipient:
+    transfer_amount = 50
+    club.send_chips_to_player(
+        receiver_user_id=recipient.id,
+        amount=transfer_amount
+    )
+    print(f"Sent {transfer_amount} chips to {recipient.username}")
+else:
+    print("Recipient 'Alice' not found for transfer")
+
 # Set credit limit using the club object
 new_credit_limit = 5000
 club.set_credit_limit_for_player(
-    player_id=player.user_id,
+    user_id=player.user_id,
     amount=new_credit_limit
 )
 print(f"Set credit limit to {new_credit_limit}")

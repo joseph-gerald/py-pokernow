@@ -1,5 +1,5 @@
 """
-py-pokernow: A Python library for interacting with pokernow.club
+py-pokernow: A Python library for interacting with pokernow.com
 
 This module provides classes and methods to interact with the PokerNow Club API,
 allowing you to manage clubs, players, games, and transactions programmatically.
@@ -99,6 +99,55 @@ class PokerNowPlayer:
     
     def __repr__(self) -> str:
         return f"PokerNowPlayer(username='{self.username}', chips={self.chips_balance})"
+
+
+class ChipOperationResult:
+    """
+    Represents the result of a chip operation (add/remove).
+    
+    Attributes:
+        movement_id: Unique identifier for the movement/transaction
+        updated_player: Updated player information after the operation
+        success: Whether the operation was successful
+    """
+    
+    def __init__(self, result_data: Dict[str, Any]):
+        """
+        Initialize a ChipOperationResult from API response data.
+        
+        Args:
+            result_data: Dictionary containing the result from the API
+        """
+        self._data = result_data
+        
+        # Extract updated player data
+        updated_player_data = result_data.get('result', {}).get('updatedPlayer', {})
+        self._updated_player = PokerNowPlayer(updated_player_data) if updated_player_data else None
+    
+    @property
+    def movement_id(self) -> str:
+        """Movement/transaction ID."""
+        return self._data.get('result', {}).get('movement', {}).get('id', '')
+    
+    @property
+    def updated_player(self) -> Optional[PokerNowPlayer]:
+        """Updated player information after the operation."""
+        return self._updated_player
+    
+    @property
+    def success(self) -> bool:
+        """Whether the operation was successful."""
+        return self._data.get('success', False)
+    
+    @property
+    def new_balance(self) -> int:
+        """New chip balance after the operation."""
+        if self._updated_player:
+            return self._updated_player.chips_balance
+        return 0
+    
+    def __repr__(self) -> str:
+        return f"ChipOperationResult(movement_id='{self.movement_id}', new_balance={self.new_balance})"
 
 
 class PokerNowGame:
@@ -423,18 +472,18 @@ class PokerNowClub:
                 return player
         return None
     
-    def get_player_by_id(self, player_id: str) -> Optional[PokerNowPlayer]:
+    def get_player_by_id(self, user_id: str) -> Optional[PokerNowPlayer]:
         """
         Find a player by their club player ID.
         
         Args:
-            player_id: The player ID to search for
+            user_id: The player ID to search for
             
         Returns:
             PokerNowPlayer object if found, None otherwise
         """
         for player in self.players:
-            if player.id == player_id:
+            if player.id == user_id:
                 return player
         return None
     
@@ -490,53 +539,70 @@ class PokerNowClub:
                 "Obtain the club via session.get_club() to use this method."
             )
     
-    def add_chips_to_player(self, player_id: str, amount: int, reason: str) -> None:
+    def add_chips_to_player(self, user_id: str, amount: int, reason: str) -> 'ChipOperationResult':
         """
         Add chips to a player's balance.
         
         Args:
-            player_id: The club player ID
+            user_id: The club player ID
             amount: Amount of chips to add
             reason: Reason for adding chips
+            
+        Returns:
+            ChipOperationResult with movement ID and updated player info
         """
         self._require_session()
-        self._session.add_club_chips_to_player(self.id, player_id, amount, reason)
+        return self._session.add_club_chips_to_player(self.id, user_id, amount, reason)
     
-    def remove_chips_from_player(self, player_id: str, amount: int, reason: str) -> None:
+    def remove_chips_from_player(self, user_id: str, amount: int, reason: str) -> 'ChipOperationResult':
         """
         Remove chips from a player's balance.
         
         Args:
-            player_id: The club player ID
+            user_id: The club player ID
             amount: Amount of chips to remove
             reason: Reason for removing chips
+            
+        Returns:
+            ChipOperationResult with movement ID and updated player info
         """
         self._require_session()
-        self._session.remove_club_chips_from_player(self.id, player_id, amount, reason)
+        return self._session.remove_club_chips_from_player(self.id, user_id, amount, reason)
+
+    def send_chips_to_player(self, receiver_user_id: str, amount: int) -> None:
+        """
+        Send chips from the authenticated user to another player (P2P transfer).
+
+        Args:
+            receiver_user_id: The club player ID of the recipient
+            amount: Amount of chips to send
+        """
+        self._require_session()
+        self._session.send_chips_to_player(self.id, receiver_user_id, amount)
     
-    def set_credit_limit_for_player(self, player_id: str, amount: int) -> None:
+    def set_credit_limit_for_player(self, user_id: str, amount: int) -> None:
         """
         Set the credit limit for a player.
         
         Args:
-            player_id: The club player ID
+            user_id: The club player ID
             amount: New credit limit amount
         """
         self._require_session()
-        self._session.set_club_credit_limit_for_player(self.id, player_id, amount)
+        self._session.set_club_credit_limit_for_player(self.id, user_id, amount)
     
-    def get_player_transactions(self, player_id: str) -> List[PokerNowTransaction]:
+    def get_player_transactions(self, user_id: str) -> List[PokerNowTransaction]:
         """
         Get transaction history for a player.
         
         Args:
-            player_id: The club player ID
+            user_id: The club player ID
             
         Returns:
             List of PokerNowTransaction objects
         """
         self._require_session()
-        return self._session.get_club_player_transactions(self.id, player_id)
+        return self._session.get_club_player_transactions(self.id, user_id)
     
     def set_player_role(self, player_user_id: str, role: str) -> None:
         """
@@ -581,6 +647,16 @@ class PokerNowClub:
         """
         self._require_session()
         self._session.close_club_game(self.id, game_id)
+    
+    def get_games(self) -> List[PokerNowGame]:
+        """
+        Fetch fresh list of all games in the club from the server.
+        
+        Returns:
+            List of PokerNowGame objects
+        """
+        self._require_session()
+        return self._session.get_club_games(self.id)
     
     def set_ledger_visibility(self, show: bool) -> None:
         """
@@ -632,6 +708,26 @@ class PokerNowClub:
         """
         self._require_session()
         self._session.set_club_exclusivity(self.id, option, message)
+    
+    def set_landing_page(self, content: str) -> None:
+        """
+        Set the club's landing page content (supports Markdown).
+        
+        Args:
+            content: Markdown content for the landing page
+        """
+        self._require_session()
+        return self._session.set_club_landing_page(self.id, content)
+    
+    def set_rules(self, content: str) -> None:
+        """
+        Set the club's rules content (supports Markdown).
+        
+        Args:
+            content: Markdown content for the rules
+        """
+        self._require_session()
+        self._session.set_club_rules(self.id, content)
     
     def __repr__(self) -> str:
         return f"PokerNowClub(name='{self.name}', players={len(self.players)}, games={len(self.games)})"
@@ -755,10 +851,11 @@ class PokerNowSession:
         Initialize a PokerNow session.
         
         Args:
-            apt_token: Authentication token from pokernow.club cookies
+            apt_token: Authentication token from pokernow.com cookies
         """
         self.session = requests.Session()
         self.session.cookies.update({'apt': apt_token})
+        self.apt_token = apt_token
         
     def get_club(self, slug: str) -> PokerNowClub:
         """
@@ -773,7 +870,7 @@ class PokerNowSession:
         Raises:
             ValueError: If the club cannot be found
         """
-        response = self.session.get(f'https://www.pokernow.club/clubs/{slug}')
+        response = self.session.get(f'https://www.pokernow.com/clubs/{slug}')
         response.raise_for_status()
         
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -808,7 +905,7 @@ class PokerNowSession:
             'use_cents': 'true' if use_cents else 'false',
         }
 
-        response = self.session.post('https://www.pokernow.club/clubs/club/create', data=data)
+        response = self.session.post('https://www.pokernow.com/clubs/club/create', data=data)
         response.raise_for_status()
         
         result = response.json()
@@ -835,7 +932,7 @@ class PokerNowSession:
             'receiver_player_id': receiver_player_id,
         }
         
-        response = self.session.get('https://www.pokernow.club/subscription/checkout', params=params)
+        response = self.session.get('https://www.pokernow.com/subscription/checkout', params=params)
         return response.url
     
     def handle_payment_callback(self, session_id: str) -> str:
@@ -849,7 +946,7 @@ class PokerNowSession:
             Response text from the callback
         """
         params = {'session_id': session_id}
-        response = self.session.get('https://www.pokernow.club/subscription/payment-back', params=params)
+        response = self.session.get('https://www.pokernow.com/subscription/payment-back', params=params)
         return response.text
     
     def set_club_ledger_visibility(self, club_id: str, show: bool) -> None:
@@ -864,7 +961,7 @@ class PokerNowSession:
             'clubId': club_id,
             'enabled': 'true' if show else 'false',
         }
-        response = self.session.post('https://www.pokernow.club/clubs/club/ledger/all', data=data)
+        response = self.session.post('https://www.pokernow.com/clubs/club/ledger/all', data=data)
         response.raise_for_status()
     
     def set_club_play_report_visibility(self, club_id: str, show: bool) -> None:
@@ -879,7 +976,7 @@ class PokerNowSession:
             'clubId': club_id,
             'enabled': 'true' if show else 'false',
         }
-        response = self.session.post('https://www.pokernow.club/clubs/club/playreport/all', data=data)
+        response = self.session.post('https://www.pokernow.com/clubs/club/playreport/all', data=data)
         response.raise_for_status()
     
     def set_club_game_archive_visibility(self, club_id: str, show: bool) -> None:
@@ -894,7 +991,7 @@ class PokerNowSession:
             'clubId': club_id,
             'enabled': 'true' if show else 'false',
         }
-        response = self.session.post('https://www.pokernow.club/clubs/club/archive/all', data=data)
+        response = self.session.post('https://www.pokernow.com/clubs/club/archive/all', data=data)
         response.raise_for_status()
     
     def set_club_p2p_transfers(self, club_id: str, enabled: bool) -> None:
@@ -909,7 +1006,7 @@ class PokerNowSession:
             'clubId': club_id,
             'enabled': 'true' if enabled else 'false',
         }
-        response = self.session.post('https://www.pokernow.club/clubs/club/player/2/player', data=data)
+        response = self.session.post('https://www.pokernow.com/clubs/club/player/2/player', data=data)
         response.raise_for_status()
     
     def set_club_exclusivity(self, club_id: str, option: str, message: str = "") -> None:
@@ -927,7 +1024,45 @@ class PokerNowSession:
             'otherRejectMessage': message,
         }
         response = self.session.post(
-            'https://www.pokernow.club/clubs/club/updatesettingattributes',
+            'https://www.pokernow.com/clubs/club/updatesettingattributes',
+            data=data
+        )
+        response.raise_for_status()
+    
+    def set_club_landing_page(self, club_id: str, content: str) -> None:
+        """
+        Set the club's landing page content (supports Markdown).
+        
+        Args:
+            club_id: The club ID
+            content: Markdown content for the landing page
+        """
+        data = {
+            'clubId': club_id,
+            'landing': content,
+        }
+        response = self.session.post(
+            'https://www.pokernow.com/clubs/club/landingpage/update',
+            data=data
+        )
+        response.raise_for_status()
+        
+        return response
+    
+    def set_club_rules(self, club_id: str, content: str) -> None:
+        """
+        Set the club's rules content (supports Markdown).
+        
+        Args:
+            club_id: The club ID
+            content: Markdown content for the rules
+        """
+        data = {
+            'clubId': club_id,
+            'rules': content,
+        }
+        response = self.session.post(
+            'https://www.pokernow.com/clubs/club/rules/update',
             data=data
         )
         response.raise_for_status()
@@ -943,7 +1078,7 @@ class PokerNowSession:
         data = config.to_dict(is_preset=True)
         data.update({'clubId': club_id, 'presetName': config.name})
         
-        response = self.session.post('https://www.pokernow.club/clubs/club-preset', data=data)
+        response = self.session.post('https://www.pokernow.com/clubs/club-preset', data=data)
         response.raise_for_status()
 
     def create_club_game(self, club_id: str, config: PokerGameConfig) -> str:
@@ -960,7 +1095,7 @@ class PokerNowSession:
         data = config.to_dict(is_preset=False)
         data['clubId'] = club_id
         
-        response = self.session.post('https://www.pokernow.club/clubs/club/game/create', data=data)
+        response = self.session.post('https://www.pokernow.com/clubs/club/game/create', data=data)
         response.raise_for_status()
         
         return response.json().get('game', {}).get('game', {}).get('id', '')
@@ -981,41 +1116,68 @@ class PokerNowSession:
             'gameId': game_id,
         }
         
-        response = self.session.post('https://www.pokernow.club/clubs/club/game/close', data=data)
+        response = self.session.post('https://www.pokernow.com/clubs/club/game/close', data=data)
         response.raise_for_status()
         
         if not response.json().get('success', False):
             raise ValueError(f"Could not close game: {response.text}")
+    
+    def get_club_games(self, club_id: str) -> List[PokerNowGame]:
+        """
+        Fetch fresh list of all games in the club.
+        
+        Args:
+            club_id: The club ID
+            
+        Returns:
+            List of PokerNowGame objects
+        """
+        params = {'clubId': club_id}
+        response = self.session.get(
+            'https://www.pokernow.com/clubs/mtt/club/refresh/games',
+            params=params
+        )
+        response.raise_for_status()
+        
+        data = response.json()
+        return [PokerNowGame(g) for g in data.get('games', [])]
 
-    def add_club_chips_to_player(self, club_id: str, player_id: str, amount: int, reason: str) -> None:
+    def add_club_chips_to_player(self, club_id: str, user_id: str, amount: int, reason: str) -> ChipOperationResult:
         """
         Add chips to a player's balance.
         
         Args:
             club_id: The club ID
-            player_id: The club player ID
+            user_id: The club player ID
             amount: Amount of chips to add
             reason: Reason for adding chips
+            
+        Returns:
+            ChipOperationResult with movement ID and updated player info
         """
         data = {
             'quantity': str(amount),
             'reason': reason,
         }
         response = self.session.post(
-            f'https://www.pokernow.club/clubs/chips/add/{club_id}/{player_id}',
+            f'https://www.pokernow.com/clubs/chips/add/{club_id}/{user_id}',
             data=data
         )
         response.raise_for_status()
+        return ChipOperationResult(response.json())
     
-    def remove_club_chips_from_player(self, club_id: str, player_id: str, amount: int, reason: str) -> None:
+    def remove_club_chips_from_player(self, club_id: str, user_id: str, amount: int, reason: str) -> ChipOperationResult:
         """
         Remove chips from a player's balance.
         
         Args:
             club_id: The club ID
-            player_id: The club player ID
+            user_id: The club player ID
             amount: Amount of chips to remove
             reason: Reason for removing chips
+            
+        Returns:
+            ChipOperationResult with movement ID and updated player info
             
         Raises:
             ValueError: If chips cannot be removed
@@ -1025,21 +1187,50 @@ class PokerNowSession:
             'reason': reason,
         }
         response = self.session.post(
-            f'https://www.pokernow.club/clubs/chips/remove/{club_id}/{player_id}',
+            f'https://www.pokernow.com/clubs/chips/remove/{club_id}/{user_id}',
             data=data
         )
         response.raise_for_status()
         
-        if not response.json().get('success', False):
-            raise ValueError(f"Could not remove chips: {response.json().get('errmsg', 'Unknown error')}")
+        result = response.json()
+        if not result.get('success', False):
+            raise ValueError(f"Could not remove chips: {result.get('errmsg', 'Unknown error')}")
         
-    def set_club_credit_limit_for_player(self, club_id: str, player_id: str, amount: int) -> None:
+        return ChipOperationResult(result)
+
+    def send_chips_to_player(self, club_id: str, receiver_user_id: str, amount: int) -> None:
+        """
+        Send chips from the authenticated user to another player (P2P transfer).
+
+        Args:
+            club_id: The club ID
+            receiver_user_id: The club player ID of the recipient
+            amount: Amount of chips to send
+        """
+        data = {
+            'amt': str(amount),
+        }
+        response = self.session.post(
+            f'https://www.pokernow.com/clubs/chips/send/{club_id}/{receiver_user_id}',
+            data=data
+        )
+        response.raise_for_status()
+
+        try:
+            result = response.json()
+        except ValueError:
+            return
+
+        if isinstance(result, dict) and not result.get('success', True):
+            raise ValueError(f"Could not send chips: {result.get('errmsg', 'Unknown error')}")
+        
+    def set_club_credit_limit_for_player(self, club_id: str, user_id: str, amount: int) -> None:
         """
         Set the credit limit for a player.
         
         Args:
             club_id: The club ID
-            player_id: The club player ID
+            user_id: The club player ID
             amount: New credit limit amount
             
         Raises:
@@ -1047,28 +1238,28 @@ class PokerNowSession:
         """
         data = {
             'clubId': club_id,
-            'networkUserId': player_id,
+            'networkUserId': user_id,
             'creditLimit': str(amount),
         }
-        response = self.session.post('https://www.pokernow.club/clubs/chips/creditlimit', data=data)
+        response = self.session.post('https://www.pokernow.com/clubs/chips/creditlimit', data=data)
         response.raise_for_status()
         
         if not response.json().get('success', False):
             raise ValueError(f"Could not set credit limit: {response.json().get('errmsg', 'Unknown error')}")
         
-    def get_club_player_transactions(self, club_id: str, player_id: str) -> List[PokerNowTransaction]:
+    def get_club_player_transactions(self, club_id: str, user_id: str) -> List[PokerNowTransaction]:
         """
         Get transaction history for a player.
         
         Args:
             club_id: The club ID
-            player_id: The club player ID
+            user_id: The club player ID
             
         Returns:
             List of PokerNowTransaction objects
         """
         response = self.session.get(
-            f'https://www.pokernow.club/clubs/wallet/movements/{club_id}/{player_id}'
+            f'https://www.pokernow.com/clubs/wallet/movements/{club_id}/{user_id}'
         )
         response.raise_for_status()
         
@@ -1092,7 +1283,7 @@ class PokerNowSession:
             'user_id': player_user_id,
             'club_role': role,
         }
-        response = self.session.post('https://www.pokernow.club/clubs/club/player/role', data=data)
+        response = self.session.post('https://www.pokernow.com/clubs/club/player/role', data=data)
         response.raise_for_status()
         
         if not response.json().get('success', False):
@@ -1110,7 +1301,7 @@ class PokerNowSession:
             ValueError: If the user update fails
         """
         # Get CSRF token from edit page
-        response = self.session.get('https://network.pokernow.club/current_user/edit')
+        response = self.session.get('https://network.pokernow.com/current_user/edit')
         response.raise_for_status()
         
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -1126,7 +1317,7 @@ class PokerNowSession:
             'current_user_update[email]': email,
         }
         
-        response = self.session.post('https://network.pokernow.club/current_user', data=data)
+        response = self.session.post('https://network.pokernow.com/current_user', data=data)
         response.raise_for_status()
 
 
@@ -1149,19 +1340,19 @@ def login(email: str, otp_callback: 'Callable[[str], str]') -> PokerNowSession:
     session = requests.Session()
     
     # Get CSRF token from login page
-    res = session.get("https://network.pokernow.club/sessions/new")
+    res = session.get("https://network.pokernow.com/sessions/new")
     soup = BeautifulSoup(res.text, 'html.parser')
     csrf_token = soup.find('meta', attrs={'name': 'csrf-token'})['content']
     
     # Request OTP
-    params = {'back_to': 'https://www.pokernow.club/'}
+    params = {'back_to': 'https://www.pokernow.com/'}
     data = {
         'utf8': '✓',
         'authenticity_token': csrf_token,
         'user_login_form[email]': email,
         'commit': 'Send me the Login Code',
     }
-    response = session.post('https://network.pokernow.club/sessions', params=params, data=data)
+    response = session.post('https://network.pokernow.com/sessions', params=params, data=data)
     
     # Get new CSRF token
     soup = BeautifulSoup(response.text, 'html.parser')
@@ -1172,7 +1363,7 @@ def login(email: str, otp_callback: 'Callable[[str], str]') -> PokerNowSession:
     
     # Submit OTP
     params = {
-        'back_to': 'https://www.pokernow.club/',
+        'back_to': 'https://www.pokernow.com/',
         'code_confirmation': 'true',
     }
     data = {
@@ -1181,7 +1372,7 @@ def login(email: str, otp_callback: 'Callable[[str], str]') -> PokerNowSession:
         'user_login_code_form[code]': otp,
         'commit': 'Confirm my Login Code',
     }
-    response = session.post('https://network.pokernow.club/sessions', params=params, data=data)
+    response = session.post('https://network.pokernow.com/sessions', params=params, data=data)
     
     # Extract apt token from cookies
     apt_token = session.cookies.get('apt')

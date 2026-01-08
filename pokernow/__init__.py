@@ -14,6 +14,7 @@ from .pokernow import (
     PokerNowSession,
     PokerNowTransaction,
     PokerGameConfig,
+    ChipOperationResult,
     login,
 )
 
@@ -24,6 +25,7 @@ __all__ = [
     "PokerNowSession",
     "PokerNowTransaction",
     "PokerGameConfig",
+    "ChipOperationResult",
     "login",
     "__version__",
 ]

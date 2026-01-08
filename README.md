@@ -36,7 +36,7 @@ print(f"Total chips: {club.total_chips_in_club()}")
 player = club.get_player_by_username("player_name")
 if player:
     club.add_chips_to_player(
-        player_id=player.id,
+        user_id=player.id,
         amount=1000,
         reason="Bonus chips"
     )
@@ -117,7 +117,7 @@ for tx in transactions:
 - `update_user(username, email)` - Update current user's profile
 
 **Payment & Subscription:**
-- `create_stripe_checkout(mode, plan, receiver_player_id)` - Create checkout session
+- `create_stripe_checkout(mode, plan, receiver_user_id)` - Create checkout session
 - `handle_payment_callback(session_id)` - Handle payment callback
 
 ### PokerNowClub Methods
@@ -130,12 +130,15 @@ Once you have a club object (via `session.get_club()`), you can call these metho
 - `club.set_game_archive_visibility(show)` - Toggle archive visibility
 - `club.set_p2p_transfers(enabled)` - Enable/disable P2P transfers
 - `club.set_exclusivity(option, message)` - Set club exclusivity settings
+- `club.set_landing_page(content)` - Set club landing page (Markdown)
+- `club.set_rules(content)` - Set club rules (Markdown)
 
 **Player Management:**
-- `club.add_chips_to_player(player_id, amount, reason)` - Add chips
-- `club.remove_chips_from_player(player_id, amount, reason)` - Remove chips
-- `club.set_credit_limit_for_player(player_id, amount)` - Set credit limit
-- `club.get_player_transactions(player_id)` - Get transaction history
+- `club.add_chips_to_player(user_id, amount, reason)` - Add chips
+- `club.remove_chips_from_player(user_id, amount, reason)` - Remove chips
+- `club.send_chips_to_player(receiver_user_id, amount)` - Send chips to another player (P2P)
+- `club.set_credit_limit_for_player(user_id, amount)` - Set credit limit
+- `club.get_player_transactions(user_id)` - Get transaction history
 - `club.set_player_role(player_user_id, role)` - Set player role
 
 **Game Management:**

@@ -56,7 +56,7 @@ print(f"Total chips: {club.total_chips_in_club()}")
 player = club.get_player_by_username("username")
 session.add_club_chips_to_player(
     club_id=club.id,
-    player_id=player.id,
+    user_id=player.id,
     amount=1000,
     reason="Bonus"
 )
