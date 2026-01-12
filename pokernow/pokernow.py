@@ -101,6 +101,86 @@ class PokerNowPlayer:
         return f"PokerNowPlayer(username='{self.username}', chips={self.chips_balance})"
 
 
+class PokerNowCurrentPlayerInfo:
+    """
+    Represents the current authenticated player's information.
+    
+    Attributes:
+        id: Unique player ID
+        network_username: Player's network username
+        is_network_player: Whether this is a network player
+        is_premium: Whether the player has premium status
+        plus_plan: Plus plan information (if applicable)
+        email: Player's email address
+        now_coins: Number of NowCoins the player has
+        phone: Player's phone number
+        allow_premium: Whether premium is allowed for this player
+        badges: List of player badges
+    """
+    
+    def __init__(self, player_data: Dict[str, Any]):
+        """
+        Initialize a PokerNowCurrentPlayerInfo from API data.
+        
+        Args:
+            player_data: Dictionary containing current player information from the API
+        """
+        self._data = player_data
+    
+    @property
+    def id(self) -> str:
+        """Player ID."""
+        return self._data.get('id', '')
+    
+    @property
+    def network_username(self) -> str:
+        """Player's network username."""
+        return self._data.get('networkUsername', '')
+    
+    @property
+    def is_network_player(self) -> bool:
+        """Whether this is a network player."""
+        return self._data.get('isNetworkPlayer', False)
+    
+    @property
+    def is_premium(self) -> bool:
+        """Whether the player has premium status."""
+        return self._data.get('isPremium', False)
+    
+    @property
+    def plus_plan(self) -> Optional[str]:
+        """Plus plan information."""
+        return self._data.get('plusPlan')
+    
+    @property
+    def email(self) -> str:
+        """Player's email address."""
+        return self._data.get('email', '')
+    
+    @property
+    def now_coins(self) -> int:
+        """Number of NowCoins the player has."""
+        return self._data.get('nowCoins', 0)
+    
+    @property
+    def phone(self) -> str:
+        """Player's phone number."""
+        return self._data.get('phone', '')
+    
+    @property
+    def allow_premium(self) -> bool:
+        """Whether premium is allowed for this player."""
+        return self._data.get('allowPremium', False)
+    
+    @property
+    def badges(self) -> List[Any]:
+        """List of player badges."""
+        return self._data.get('badges', [])
+    
+    def __repr__(self) -> str:
+        return f"PokerNowCurrentPlayerInfo(username='{self.network_username}', email='{self.email}', premium={self.is_premium})"
+
+
 class ChipOperationResult:
     """
     Represents the result of a chip operation (add/remove).
@@ -856,6 +936,22 @@ class PokerNowSession:
         self.session = requests.Session()
         self.session.cookies.update({'apt': apt_token})
         self.apt_token = apt_token
+    
+    def get_current_player_info(self) -> PokerNowCurrentPlayerInfo:
+        """
+        Fetch the current authenticated player's information.
+        
+        Returns:
+            PokerNowCurrentPlayerInfo object with player details
+            
+        Raises:
+            ValueError: If the player information cannot be retrieved
+        """
+        response = self.session.get('https://www.pokernow.com/current-player-infos')
+        response.raise_for_status()
+        
+        player_data = response.json()
+        return PokerNowCurrentPlayerInfo(player_data)
         
     def get_club(self, slug: str) -> PokerNowClub:
         """
@@ -873,13 +969,24 @@ class PokerNowSession:
         response = self.session.get(f'https://www.pokernow.com/clubs/{slug}')
         response.raise_for_status()
         
-        soup = BeautifulSoup(response.text, 'html.parser')
-        embedded_club = soup.find(id="embedded-club")
+        try:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            embedded_club = soup.find(id="embedded-club")
+            
+            if not embedded_club:
+                raise ValueError(f"Could not find club data for club slug: {slug}")
+            
+            club_data = json.loads(embedded_club.string)
+        except Exception as e:            
+            script_content = response.text.split('id="embedded-club">')[1]
+            
+            script_content = ''.join(script_content.split('</script>')[:-1])
+            
+            try:
+                club_data = json.loads(script_content)
+            except Exception:
+                raise ValueError(f"Could not parse club data for club slug (fallback mode): {slug}") from e
         
-        if not embedded_club:
-            raise ValueError(f"Could not find club data for club slug: {slug}")
-        
-        club_data = json.loads(embedded_club.string)
         return PokerNowClub(club_data, session=self)
     
     def create_club(self, slug: str, name: str, description: str, use_cents: bool = False) -> PokerNowClub:
