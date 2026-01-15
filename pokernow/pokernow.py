@@ -552,18 +552,33 @@ class PokerNowClub:
                 return player
         return None
     
-    def get_player_by_id(self, user_id: str) -> Optional[PokerNowPlayer]:
+    def get_player_by_id(self, id: str) -> Optional[PokerNowPlayer]:
         """
         Find a player by their club player ID.
         
         Args:
-            user_id: The player ID to search for
+            id: The player ID to search for
             
         Returns:
             PokerNowPlayer object if found, None otherwise
         """
         for player in self.players:
-            if player.id == user_id:
+            if player.id == id:
+                return player
+        return None
+    
+    def get_player_by_player_id(self, player_id: str) -> Optional[PokerNowPlayer]:
+        """
+        Find a player by their club player ID.
+        
+        Args:
+            player_id: The player ID to search for
+            
+        Returns:
+            PokerNowPlayer object if found, None otherwise
+        """
+        for player in self.players:
+            if player.player_id == player_id:
                 return player
         return None
     
