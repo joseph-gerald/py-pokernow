@@ -582,6 +582,21 @@ class PokerNowClub:
                 return player
         return None
     
+    def get_player_by_user_id(self, user_id: str) -> Optional[PokerNowPlayer]:
+        """
+        Find a player by their network user ID.
+        
+        Args:
+            user_id: The network user ID to search for
+            
+        Returns:
+            PokerNowPlayer object if found, None otherwise
+        """
+        for player in self.players:
+            if player.user_id == user_id:
+                return player
+        return None
+    
     def get_game_by_name(self, name: str) -> Optional[PokerNowGame]:
         """
         Find a game by its custom table name (case-insensitive).
@@ -709,6 +724,16 @@ class PokerNowClub:
         """
         self._require_session()
         self._session.set_club_player_role(self.id, player_user_id, role)
+    
+    def remove_player(self, user_id: str) -> None:
+        """
+        Remove/kick a player from the club.
+        
+        Args:
+            user_id: The user's network ID (not club player ID)
+        """
+        self._require_session()
+        self._session.remove_player_from_club(self.id, user_id)
     
     def create_game(self, config: 'PokerGameConfig') -> str:
         """
@@ -1410,6 +1435,27 @@ class PokerNowSession:
         
         if not response.json().get('success', False):
             raise ValueError(f"Could not set player role: {response.json().get('errmsg', 'Unknown error')}")
+
+    def remove_player_from_club(self, club_id: str, user_id: str) -> None:
+        """
+        Remove/kick a player from the club.
+        
+        Args:
+            club_id: The club ID
+            user_id: The user's network ID (not club player ID)
+            
+        Raises:
+            ValueError: If player cannot be removed
+        """
+        data = {
+            'clubId': club_id,
+            'network_user_id': user_id,
+        }
+        response = self.session.post('https://www.pokernow.com/clubs/club/leave', data=data)
+        response.raise_for_status()
+        
+        if not response.json().get('success', False):
+            raise ValueError(f"Could not remove player from club: {response.json().get('errmsg', 'Unknown error')}")
 
     def update_user(self, username: str, email: str) -> None:
         """
