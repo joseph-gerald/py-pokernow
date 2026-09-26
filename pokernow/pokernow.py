@@ -569,7 +569,7 @@ class PokerNowClub:
     
     def get_player_by_player_id(self, player_id: str) -> Optional[PokerNowPlayer]:
         """
-        Find a player by their club player ID.
+        Find a player by their PokerNow player ID.
         
         Args:
             player_id: The player ID to search for
@@ -654,7 +654,7 @@ class PokerNowClub:
         Add chips to a player's balance.
         
         Args:
-            user_id: The club player ID
+            user_id: The player's network user ID (player.user_id)
             amount: Amount of chips to add
             reason: Reason for adding chips
             
@@ -669,7 +669,7 @@ class PokerNowClub:
         Remove chips from a player's balance.
         
         Args:
-            user_id: The club player ID
+            user_id: The player's network user ID (player.user_id)
             amount: Amount of chips to remove
             reason: Reason for removing chips
             
@@ -684,7 +684,7 @@ class PokerNowClub:
         Send chips from the authenticated user to another player (P2P transfer).
 
         Args:
-            receiver_user_id: The club player ID of the recipient
+            receiver_user_id: The recipient's network user ID (player.user_id)
             amount: Amount of chips to send
         """
         self._require_session()
@@ -695,7 +695,7 @@ class PokerNowClub:
         Set the credit limit for a player.
         
         Args:
-            user_id: The club player ID
+            user_id: The player's network user ID (player.user_id)
             amount: New credit limit amount
         """
         self._require_session()
@@ -706,7 +706,7 @@ class PokerNowClub:
         Get transaction history for a player.
         
         Args:
-            user_id: The club player ID
+            user_id: The player's network user ID (player.user_id)
             
         Returns:
             List of PokerNowTransaction objects
@@ -829,12 +829,17 @@ class PokerNowClub:
         self._require_session()
         self._session.set_club_exclusivity(self.id, option, message)
     
-    def set_landing_page(self, content: str) -> None:
+    def set_landing_page(self, content: str) -> requests.Response:
         """
         Set the club's landing page content (supports Markdown).
-        
+
         Args:
             content: Markdown content for the landing page
+
+        Returns:
+            The raw HTTP response. PokerNow can reject content with HTTP 200 +
+            ``{"success": false}``, so check the body before treating the save
+            as landed.
         """
         self._require_session()
         return self._session.set_club_landing_page(self.id, content)
@@ -943,7 +948,7 @@ class PokerGameConfig:
             if not is_preset:
                 return k
             if '[' in k:
-                return f"config[{k.replace('[', '][', 1)}]"
+                return f"config[{k.replace('[', '][', 1)}"
             return f"config[{k}]"
         
         return {
@@ -958,6 +963,23 @@ class PokerGameConfig:
         }
 
 
+class _TimeoutSession(requests.Session):
+    """requests.Session with a default timeout for every request.
+
+    A hung PokerNow call would otherwise block the caller forever. With
+    ``timeout=None`` (the default) requests' no-timeout behavior is preserved.
+    """
+
+    def __init__(self, timeout: Optional[float] = None):
+        super().__init__()
+        self._timeout = timeout
+
+    def request(self, method: str, url: str, **kwargs: Any) -> requests.Response:
+        if kwargs.get("timeout") is None and self._timeout is not None:
+            kwargs["timeout"] = self._timeout
+        return super().request(method, url, **kwargs)
+
+
 class PokerNowSession:
     """
     Session for interacting with the PokerNow API.
@@ -966,14 +988,17 @@ class PokerNowSession:
     managing clubs, players, and games.
     """
     
-    def __init__(self, apt_token: str):
+    def __init__(self, apt_token: str, timeout: Optional[float] = None):
         """
         Initialize a PokerNow session.
-        
+
         Args:
             apt_token: Authentication token from pokernow.com cookies
+            timeout: Optional per-request timeout in seconds. When set, every
+                HTTP request made through this session is bounded; without it
+                a hung request can block the caller indefinitely.
         """
-        self.session = requests.Session()
+        self.session = _TimeoutSession(timeout)
         self.session.cookies.update({'apt': apt_token})
         self.apt_token = apt_token
     
@@ -1017,12 +1042,10 @@ class PokerNowSession:
                 raise ValueError(f"Could not find club data for club slug: {slug}")
             
             club_data = json.loads(embedded_club.string)
-        except Exception as e:            
-            script_content = response.text.split('id="embedded-club">')[1]
-            
-            script_content = ''.join(script_content.split('</script>')[:-1])
-            
+        except Exception as e:
             try:
+                script_content = response.text.split('id="embedded-club">')[1]
+                script_content = ''.join(script_content.split('</script>')[:-1])
                 club_data = json.loads(script_content)
             except Exception:
                 raise ValueError(f"Could not parse club data for club slug (fallback mode): {slug}") from e
@@ -1176,13 +1199,17 @@ class PokerNowSession:
         )
         response.raise_for_status()
     
-    def set_club_landing_page(self, club_id: str, content: str) -> None:
+    def set_club_landing_page(self, club_id: str, content: str) -> requests.Response:
         """
         Set the club's landing page content (supports Markdown).
-        
+
         Args:
             club_id: The club ID
             content: Markdown content for the landing page
+
+        Returns:
+            The raw HTTP response (PokerNow can report a refusal in the body
+            with HTTP 200; callers must check ``success``).
         """
         data = {
             'clubId': club_id,
@@ -1295,12 +1322,15 @@ class PokerNowSession:
         
         Args:
             club_id: The club ID
-            user_id: The club player ID
+            user_id: The player's network user ID (player.user_id)
             amount: Amount of chips to add
             reason: Reason for adding chips
             
         Returns:
             ChipOperationResult with movement ID and updated player info
+
+        Raises:
+            ValueError: If chips cannot be added
         """
         data = {
             'quantity': str(amount),
@@ -1311,7 +1341,12 @@ class PokerNowSession:
             data=data
         )
         response.raise_for_status()
-        return ChipOperationResult(response.json())
+
+        result = response.json()
+        if not result.get('success', False):
+            raise ValueError(f"Could not add chips: {result.get('errmsg', 'Unknown error')}")
+
+        return ChipOperationResult(result)
     
     def remove_club_chips_from_player(self, club_id: str, user_id: str, amount: int, reason: str) -> ChipOperationResult:
         """
@@ -1319,7 +1354,7 @@ class PokerNowSession:
         
         Args:
             club_id: The club ID
-            user_id: The club player ID
+            user_id: The player's network user ID (player.user_id)
             amount: Amount of chips to remove
             reason: Reason for removing chips
             
@@ -1351,7 +1386,7 @@ class PokerNowSession:
 
         Args:
             club_id: The club ID
-            receiver_user_id: The club player ID of the recipient
+            receiver_user_id: The recipient's network user ID (player.user_id)
             amount: Amount of chips to send
         """
         data = {
@@ -1377,7 +1412,7 @@ class PokerNowSession:
         
         Args:
             club_id: The club ID
-            user_id: The club player ID
+            user_id: The player's network user ID (player.user_id)
             amount: New credit limit amount
             
         Raises:
@@ -1400,7 +1435,7 @@ class PokerNowSession:
         
         Args:
             club_id: The club ID
-            user_id: The club player ID
+            user_id: The player's network user ID (player.user_id)
             
         Returns:
             List of PokerNowTransaction objects
@@ -1489,23 +1524,25 @@ class PokerNowSession:
         response.raise_for_status()
 
 
-def login(email: str, otp_callback: 'Callable[[str], str]') -> PokerNowSession:
+def login(email: str, otp_callback: 'Callable[[str], str]',
+          timeout: Optional[float] = None) -> PokerNowSession:
     """
     Login to PokerNow using email and OTP.
-    
+
     Args:
         email: Email address for login
         otp_callback: Function that takes email and returns the OTP code
-        
+        timeout: Optional per-request timeout in seconds
+
     Returns:
         PokerNowSession object for the authenticated user
-        
+
     Example:
         >>> def get_otp(email):
         ...     return input(f"Enter OTP sent to {email}: ")
         >>> session = login("your@email.com", get_otp)
     """
-    session = requests.Session()
+    session = _TimeoutSession(timeout)
     
     # Get CSRF token from login page
     res = session.get("https://network.pokernow.com/sessions/new")

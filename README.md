@@ -32,11 +32,13 @@ print(f"Club: {club.name}")
 print(f"Players: {len(club.players)}")
 print(f"Total chips: {club.total_chips_in_club()}")
 
-# Add chips to a player using the club object
+# Add chips to a player using the club object.
+# Chip operations take the player's NETWORK user id (player.user_id),
+# not the club player id (player.id).
 player = club.get_player_by_username("player_name")
 if player:
     club.add_chips_to_player(
-        user_id=player.id,
+        user_id=player.user_id,
         amount=1000,
         reason="Bonus chips"
     )
@@ -62,7 +64,7 @@ print(f"Created game: {game_id}")
 Main session class for API interactions.
 
 ```python
-session = PokerNowSession(apt_token="your_token")
+session = PokerNowSession(apt_token="your_token", timeout=30)  # timeout optional
 ```
 
 ### PokerNowClub
@@ -100,7 +102,7 @@ print(game.status)
 Represents a wallet transaction.
 
 ```python
-transactions = club.get_player_transactions(player.id)
+transactions = club.get_player_transactions(player.user_id)
 for tx in transactions:
     print(f"{tx.reason}: {tx.quantity} chips")
 ```
